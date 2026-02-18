@@ -44,21 +44,37 @@ async def create_challenge(
             detail={"error_code": "FILE_TOO_LARGE", "message": f"文件超过 {settings.audio_max_size_mb}MB 限制"},
         )
 
+    # ── 生成 challenge_id ──
+    challenge_id = str(uuid.uuid4())
+
+    # ── 先把原始音频临时上传到 R2，获取公开 URL 供 DashScope 访问 ──
+    # DashScope 不接受 bytes，只接受公开 HTTPS URL
+    temp_key = f"uploads/{challenge_id}_src.wav"
+    try:
+        source_public_url = storage.upload_raw(temp_key, audio_bytes)
+    except Exception as e:
+        logger.error(f"原始音频上传失败: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail={"error_code": "STORAGE_FAILED", "message": "音频存储失败，请重试"},
+        )
+    finally:
+        del audio_bytes
+
     # ── 调用阿里云 TTS-VC 生成 fake 音频 ──
     try:
-        fake_audio = await generate_ai_audio(audio_bytes)
+        fake_audio = await generate_ai_audio(source_public_url)
     except TTSVCError as e:
         logger.error(f"TTS-VC 生成失败: {e}")
+        # 清理临时原始音频
+        storage.delete_by_key(temp_key)
         raise HTTPException(
             status_code=503,
             detail={"error_code": "MODEL_FAILED", "message": "AI 音频生成失败，请重试"},
         )
-    finally:
-        # 原始音频立即丢弃（Python GC 会回收，但显式清理更安全）
-        del audio_bytes
 
-    # ── 生成 challenge_id ──
-    challenge_id = str(uuid.uuid4())
+    # ── 删除临时原始音频（不保留用户声音）──
+    storage.delete_by_key(temp_key)
 
     # ── 上传 fake 音频到 R2: fake/{challenge_id}.wav ──
     try:

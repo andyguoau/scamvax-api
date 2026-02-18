@@ -17,6 +17,8 @@ class Settings:
         self.r2_access_key_id = os.environ.get("R2_ACCESS_KEY_ID", "") or os.environ.get("R2_ACCESS_KEY", "")
         self.r2_secret_access_key = os.environ.get("R2_SECRET_ACCESS_KEY", "") or os.environ.get("R2_SECRET_KEY", "")
         self.r2_bucket_name = os.environ.get("R2_BUCKET_NAME", "") or os.environ.get("R2_BUCKET", "scamvax-audio")
+        # R2 公开访问 base URL（用于 DashScope voice enrollment）
+        self.r2_public_base_url = os.environ.get("R2_PUBLIC_BASE_URL", "").rstrip("/")
 
         # Aliyun / DashScope TTS-VC
         self.dashscope_api_key = os.environ.get("DASHSCOPE_API_KEY", "") or os.environ.get("ALIYUN_API_KEY", "")
