@@ -9,6 +9,7 @@ from app.core.config import get_settings
 from app.core.database import get_db
 from app.models.challenge import Challenge
 from app.services.tts import generate_ai_audio, TTSVCError
+from app.services.audio import convert_to_wav, AudioProcessingError
 from app.services import storage
 
 logger = logging.getLogger(__name__)
@@ -31,7 +32,7 @@ async def test_upload(audio: UploadFile = File(...)):
 
 @router.post("/create_challenge")
 async def create_challenge(
-    audio: UploadFile = File(..., description="WAV PCM16 24kHz Mono"),
+    audio: UploadFile = File(..., description="支持 WAV / MP3 / M4A / AAC / OGG / FLAC / WEBM"),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -39,12 +40,13 @@ async def create_challenge(
 
     流程：
     1. 读取音频 buffer（内存，不落盘）
-    2. 发送到阿里云 TTS-VC API 生成 fake 音频
-    3. 生成 challenge_id (UUID)
-    4. 上传 fake 音频到 R2: fake/{challenge_id}.wav
-    5. 原始音频立即丢弃
-    6. 写入 challenges 表
-    7. 返回 challenge_url
+    2. 自动检测格式并转换为 WAV（支持 m4a/mp3/ogg/flac 等）
+    3. 发送到阿里云 TTS-VC API 生成 fake 音频
+    4. 生成 challenge_id (UUID)
+    5. 上传 fake 音频到 R2: fake/{challenge_id}.wav
+    6. 原始音频立即丢弃
+    7. 写入 challenges 表
+    8. 返回 challenge_url
     """
     # ── 读取音频到内存 buffer，不落盘 ──
     max_bytes = settings.audio_max_size_mb * 1024 * 1024
@@ -53,6 +55,19 @@ async def create_challenge(
         raise HTTPException(
             status_code=413,
             detail={"error_code": "FILE_TOO_LARGE", "message": f"文件超过 {settings.audio_max_size_mb}MB 限制"},
+        )
+
+    # ── 格式转换：统一转成 WAV ──
+    try:
+        audio_bytes = convert_to_wav(
+            audio_bytes,
+            filename=audio.filename or "",
+            content_type=audio.content_type or "",
+        )
+    except AudioProcessingError as e:
+        raise HTTPException(
+            status_code=422,
+            detail={"error_code": e.error_code, "message": str(e)},
         )
 
     # ── 生成 challenge_id ──
