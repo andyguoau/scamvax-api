@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.database import get_db
-from app.services.audio import validate_and_process_audio, AudioProcessingError
+from app.services.audio import convert_to_wav, AudioProcessingError
 from app.services.tts import generate_ai_audio, TTSVCError
 from app.services import share as share_service
 from app.services import storage
@@ -72,7 +72,11 @@ async def create_share(
 
     # ── 音频处理 ──
     try:
-        processed_audio = validate_and_process_audio(contents)
+        processed_audio = convert_to_wav(
+            contents,
+            filename=audio_file.filename or "",
+            content_type=audio_file.content_type or "",
+        )
     except AudioProcessingError as e:
         raise HTTPException(
             status_code=422,
