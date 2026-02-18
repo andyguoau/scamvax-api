@@ -29,6 +29,33 @@ def get_fake_url(challenge_id: str) -> str:
     return f"{endpoint}/{bucket}/{key}"
 
 
+def upload_raw(key: str, audio_bytes: bytes) -> str:
+    """上传原始音频到 R2，返回公开访问 URL（用于 DashScope enrollment）"""
+    client = _get_client()
+    client.put_object(
+        Bucket=settings.get_r2_bucket(),
+        Key=key,
+        Body=audio_bytes,
+        ContentType="audio/wav",
+    )
+    public_base = settings.r2_public_base_url
+    url = f"{public_base}/{key}"
+    logger.info(f"已上传原始音频: {key} -> {url}")
+    return url
+
+
+def delete_by_key(key: str) -> bool:
+    """按 key 删除 R2 对象"""
+    client = _get_client()
+    try:
+        client.delete_object(Bucket=settings.get_r2_bucket(), Key=key)
+        logger.info(f"已删除: {key}")
+        return True
+    except ClientError as e:
+        logger.error(f"删除失败 {key}: {e}")
+        return False
+
+
 def upload_audio(challenge_id: str, audio_bytes: bytes) -> str:
     """上传 fake 音频到 R2，返回公开访问 URL"""
     client = _get_client()

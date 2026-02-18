@@ -22,13 +22,11 @@ class TTSVCError(Exception):
     pass
 
 
-async def enroll_voice(audio_bytes: bytes) -> str:
+async def enroll_voice(audio_url: str) -> str:
     """
-    第一步：上传用户录音，获取 voice_id（音色注册）
-    使用 DashScope voice enrollment API
+    第一步：传公开 HTTPS URL 给 DashScope，获取 voice_id（音色注册）
+    DashScope 不接受本地文件或私有 URL，必须是公开可访问的 HTTPS 地址
     """
-    audio_b64 = base64.b64encode(audio_bytes).decode()
-
     headers = {
         "Authorization": f"Bearer {settings.dashscope_api_key}",
         "Content-Type": "application/json",
@@ -36,12 +34,13 @@ async def enroll_voice(audio_bytes: bytes) -> str:
     payload = {
         "model": settings.voice_enroll_model,
         "input": {
-            "audio": audio_b64,
+            "url": audio_url,
             "format": "wav",
         },
     }
 
     url = f"{settings.dashscope_base_http}/services/audio/tts/voice-enrollment"
+    logger.info(f"Voice enrollment 请求 URL: {audio_url}")
 
     async with aiohttp.ClientSession() as session:
         async with session.post(url, headers=headers, json=payload) as resp:
@@ -59,17 +58,17 @@ async def enroll_voice(audio_bytes: bytes) -> str:
     return voice_id
 
 
-async def generate_ai_audio(audio_bytes: bytes, lang: str = "zh") -> bytes:
+async def generate_ai_audio(audio_url: str, lang: str = "zh") -> bytes:
     """
     完整流程：
-    1. 音色注册 → voice_id
+    1. 音色注册（传公开 URL）→ voice_id
     2. WebSocket 实时 TTS-VC 生成 AI 音频
     3. 返回合成 WAV bytes
     """
     script = SCRIPTS.get(lang, SCRIPTS["zh"])
 
-    # Step 1: 注册音色
-    voice_id = await enroll_voice(audio_bytes)
+    # Step 1: 注册音色（传公开 URL）
+    voice_id = await enroll_voice(audio_url)
 
     # Step 2: WebSocket TTS-VC
     ai_audio = await _tts_vc_via_websocket(voice_id, script)
