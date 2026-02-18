@@ -10,40 +10,49 @@ settings = get_settings()
 def _get_client():
     return boto3.client(
         "s3",
-        endpoint_url=settings.r2_endpoint_url,
-        aws_access_key_id=settings.r2_access_key_id,
-        aws_secret_access_key=settings.r2_secret_access_key,
+        endpoint_url=settings.get_r2_endpoint(),
+        aws_access_key_id=settings.get_r2_access_key(),
+        aws_secret_access_key=settings.get_r2_secret_key(),
         region_name="auto",
     )
 
 
-def get_audio_key(share_id: str) -> str:
-    return f"challenge_{share_id}/ai.wav"
+def get_audio_key(challenge_id: str) -> str:
+    return f"fake/{challenge_id}.wav"
 
 
-def upload_audio(share_id: str, audio_bytes: bytes) -> str:
-    """上传 AI 音频到 R2，返回对象 key"""
+def get_fake_url(challenge_id: str) -> str:
+    """构造 R2 公开访问 URL"""
+    endpoint = settings.get_r2_endpoint().rstrip("/")
+    bucket = settings.get_r2_bucket()
+    key = get_audio_key(challenge_id)
+    return f"{endpoint}/{bucket}/{key}"
+
+
+def upload_audio(challenge_id: str, audio_bytes: bytes) -> str:
+    """上传 fake 音频到 R2，返回公开访问 URL"""
     client = _get_client()
-    key = get_audio_key(share_id)
+    key = get_audio_key(challenge_id)
 
     client.put_object(
-        Bucket=settings.r2_bucket_name,
+        Bucket=settings.get_r2_bucket(),
         Key=key,
         Body=audio_bytes,
         ContentType="audio/wav",
-        # 禁止公开读（R2 默认私有）
+        CacheControl="public, max-age=31536000, immutable",
     )
-    logger.info(f"已上传音频: {key}")
-    return key
+    url = get_fake_url(challenge_id)
+    logger.info(f"已上传音频: {key} -> {url}")
+    return url
 
 
-def download_audio(share_id: str) -> bytes:
-    """从 R2 读取 AI 音频"""
+def download_audio(challenge_id: str) -> bytes:
+    """从 R2 读取 fake 音频"""
     client = _get_client()
-    key = get_audio_key(share_id)
+    key = get_audio_key(challenge_id)
 
     try:
-        response = client.get_object(Bucket=settings.r2_bucket_name, Key=key)
+        response = client.get_object(Bucket=settings.get_r2_bucket(), Key=key)
         return response["Body"].read()
     except ClientError as e:
         if e.response["Error"]["Code"] == "NoSuchKey":
@@ -51,13 +60,13 @@ def download_audio(share_id: str) -> bytes:
         raise
 
 
-def stream_audio(share_id: str):
-    """流式读取 AI 音频（生成器）"""
+def stream_audio(challenge_id: str):
+    """流式读取 fake 音频（生成器）"""
     client = _get_client()
-    key = get_audio_key(share_id)
+    key = get_audio_key(challenge_id)
 
     try:
-        response = client.get_object(Bucket=settings.r2_bucket_name, Key=key)
+        response = client.get_object(Bucket=settings.get_r2_bucket(), Key=key)
         body = response["Body"]
         chunk_size = 65536  # 64KB
         while True:
@@ -71,13 +80,13 @@ def stream_audio(share_id: str):
         raise
 
 
-def delete_audio(share_id: str) -> bool:
-    """从 R2 删除 AI 音频，返回是否成功"""
+def delete_audio(challenge_id: str) -> bool:
+    """从 R2 删除 fake 音频，返回是否成功"""
     client = _get_client()
-    key = get_audio_key(share_id)
+    key = get_audio_key(challenge_id)
 
     try:
-        client.delete_object(Bucket=settings.r2_bucket_name, Key=key)
+        client.delete_object(Bucket=settings.get_r2_bucket(), Key=key)
         logger.info(f"已删除音频: {key}")
         return True
     except ClientError as e:
@@ -85,13 +94,13 @@ def delete_audio(share_id: str) -> bool:
         return False
 
 
-def audio_exists(share_id: str) -> bool:
+def audio_exists(challenge_id: str) -> bool:
     """检查音频是否存在"""
     client = _get_client()
-    key = get_audio_key(share_id)
+    key = get_audio_key(challenge_id)
 
     try:
-        client.head_object(Bucket=settings.r2_bucket_name, Key=key)
+        client.head_object(Bucket=settings.get_r2_bucket(), Key=key)
         return True
     except ClientError:
         return False

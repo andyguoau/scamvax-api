@@ -38,4 +38,5 @@ async def init_db():
     """创建所有表（开发用；生产用 Alembic）"""
     async with engine.begin() as conn:
         from app.models import share  # noqa: F401
+        from app.models import challenge  # noqa: F401
         await conn.run_sync(Base.metadata.create_all)
