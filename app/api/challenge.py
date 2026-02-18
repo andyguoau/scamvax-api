@@ -16,6 +16,17 @@ settings = get_settings()
 router = APIRouter(tags=["challenge"])
 
 
+# ─── POST /test_upload（仅测试用，验证 R2 上传和公开 URL）────────────────────
+
+@router.post("/test_upload")
+async def test_upload(audio: UploadFile = File(...)):
+    """上传音频到 R2，返回公开 URL，用于验证 R2 是否正常工作"""
+    audio_bytes = await audio.read()
+    key = f"test/{uuid.uuid4()}.wav"
+    url = storage.upload_raw(key, audio_bytes)
+    return JSONResponse({"key": key, "public_url": url})
+
+
 # ─── POST /create_challenge ──────────────────────────────────────────────────
 
 @router.post("/create_challenge")
