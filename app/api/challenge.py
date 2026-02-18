@@ -461,11 +461,11 @@ CHALLENGE_HTML = """<!DOCTYPE html>
       </a>
 
       <div class="store-row">
-        <a href="IOS_APP_STORE_URL" class="store-btn" id="iosBtn">
+        <a href="#" class="store-btn" id="iosBtn">
           <span class="store-icon"></span>
           <span>App Store</span>
         </a>
-        <a href="ANDROID_PLAY_STORE_URL" class="store-btn" id="androidBtn">
+        <a href="#" class="store-btn" id="androidBtn">
           <span class="store-icon">▶</span>
           <span>Google Play</span>
         </a>
@@ -574,13 +574,13 @@ CHALLENGE_HTML = """<!DOCTYPE html>
     var isAndroid = /android/i.test(navigator.userAgent);
     var ctaMain = document.getElementById('ctaMain');
     if (isIOS) {{
-      ctaMain.href = 'IOS_APP_STORE_URL';
+      ctaMain.href = '#';
       ctaMain.innerHTML = (isCN ? '制作我的声音克隆挑战（下载 App）' : 'Create my voice clone challenge (Get the app)') + ' <span class="cta-arrow">→</span>';
     }} else if (isAndroid) {{
-      ctaMain.href = 'ANDROID_PLAY_STORE_URL';
+      ctaMain.href = '#';
       ctaMain.innerHTML = (isCN ? '制作我的声音克隆挑战（下载 App）' : 'Create my voice clone challenge (Get the app)') + ' <span class="cta-arrow">→</span>';
     }} else {{
-      ctaMain.href = 'IOS_APP_STORE_URL';
+      ctaMain.href = '#';
     }}
   }}
 
