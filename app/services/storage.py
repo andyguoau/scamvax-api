@@ -22,11 +22,10 @@ def get_audio_key(challenge_id: str) -> str:
 
 
 def get_fake_url(challenge_id: str) -> str:
-    """构造 R2 公开访问 URL"""
-    endpoint = settings.get_r2_endpoint().rstrip("/")
-    bucket = settings.get_r2_bucket()
+    """构造 R2 公开访问 URL（使用 public CDN 域名）"""
+    public_base = settings.r2_public_base_url.rstrip("/")
     key = get_audio_key(challenge_id)
-    return f"{endpoint}/{bucket}/{key}"
+    return f"{public_base}/{key}"
 
 
 def upload_raw(key: str, audio_bytes: bytes) -> str:
