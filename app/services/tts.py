@@ -1,6 +1,7 @@
 import base64
 import json
 import logging
+import struct
 import aiohttp
 import websockets
 from app.core.config import get_settings
@@ -138,4 +139,27 @@ async def _tts_via_websocket(voice_name: str, text: str) -> bytes:
     if not audio_chunks:
         raise TTSVCError("未收到任何音频数据")
 
-    return b"".join(audio_chunks)
+    pcm_data = b"".join(audio_chunks)
+    return _pcm_to_wav(pcm_data, sample_rate=24000, channels=1, bit_depth=16)
+
+
+def _pcm_to_wav(pcm_data: bytes, sample_rate: int, channels: int, bit_depth: int) -> bytes:
+    """给裸 PCM 数据加上 WAV 文件头，浏览器才能播放"""
+    data_size = len(pcm_data)
+    header = struct.pack(
+        "<4sI4s4sIHHIIHH4sI",
+        b"RIFF",
+        data_size + 36,       # 文件总大小 - 8
+        b"WAVE",
+        b"fmt ",
+        16,                   # fmt chunk 大小
+        1,                    # PCM 格式
+        channels,
+        sample_rate,
+        sample_rate * channels * bit_depth // 8,  # 字节率
+        channels * bit_depth // 8,                # 块对齐
+        bit_depth,
+        b"data",
+        data_size,
+    )
+    return header + pcm_data
