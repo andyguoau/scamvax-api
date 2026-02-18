@@ -107,17 +107,12 @@ async def _tts_via_websocket(voice_name: str, text: str) -> bytes:
             "text": text,
         }))
 
-        # 3. 提交生成
+        # 3. 提交生成（server_commit 模式下自动开始生成，不需要 response.create）
         await ws.send(json.dumps({
             "type": "input_text_buffer.commit",
         }))
 
-        # 4. 触发响应
-        await ws.send(json.dumps({
-            "type": "response.create",
-        }))
-
-        # 5. 接收音频流
+        # 4. 接收音频流
         async for message in ws:
             if isinstance(message, bytes):
                 audio_chunks.append(message)
