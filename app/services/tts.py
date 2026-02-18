@@ -83,7 +83,7 @@ async def _tts_via_websocket(voice_name: str, text: str) -> bytes:
     headers = {"Authorization": f"Bearer {settings.dashscope_api_key}"}
     audio_chunks = []
 
-    async with websockets.connect(WS_URL, additional_headers=headers) as ws:
+    async with websockets.connect(WS_URL, extra_headers=headers) as ws:
         # 1. 配置 session
         await ws.send(json.dumps({
             "type": "session.update",
