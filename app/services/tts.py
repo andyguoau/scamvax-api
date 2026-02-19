@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 # 固定诈骗演习脚本
-SCRIPT = "妈，是我，我现在遇到点麻烦，需要你马上转一笔钱给我，不要告诉别人，你能帮我吗？"
+SCRIPT = "现在的人工智能发展太快，只需要5秒钟的录音就能克隆一个人的声音。当骗子使用我的声音给你打电话的时候，你确定自己能分辨出来吗？即使现在能，再过半年也许就不能了。"
 
 ENROLL_URL = "https://dashscope-intl.aliyuncs.com/api/v1/services/audio/tts/customization"
 WS_URL = "wss://dashscope-intl.aliyuncs.com/api-ws/v1/realtime?model=qwen3-tts-vc-realtime-2026-01-15"
