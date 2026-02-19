@@ -1,9 +1,10 @@
 import logging
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from datetime import datetime, timedelta, timezone
+from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, and_
 
 from app.core.config import get_settings
 from app.core.database import get_db
@@ -33,6 +34,9 @@ async def test_upload(audio: UploadFile = File(...)):
 @router.post("/create_challenge")
 async def create_challenge(
     audio: UploadFile = File(..., description="支持 WAV / MP3 / M4A / AAC / OGG / FLAC / WEBM"),
+    device_id: str = Form(..., description="设备唯一 ID，由 App 生成并持久化"),
+    unlock_proof: str = Form(..., description="解锁凭证：CREDIT / BONUS / IAP_1 / IAP_4"),
+    lang: str = Form("zh", description="语言：zh 或 en"),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -48,6 +52,32 @@ async def create_challenge(
     7. 写入 challenges 表
     8. 返回 challenge_url
     """
+    # ── 校验解锁凭证 ──
+    if not unlock_proof or unlock_proof.upper() == "NONE":
+        raise HTTPException(
+            status_code=402,
+            detail={"error_code": "UNLOCK_REQUIRED", "message": "需要有效的解锁凭证"},
+        )
+
+    # ── 设备频率限制 ──
+    window_start = datetime.now(timezone.utc) - timedelta(
+        seconds=settings.rate_limit_window_seconds
+    )
+    rate_result = await db.execute(
+        select(Challenge).where(
+            and_(
+                Challenge.device_id == device_id,
+                Challenge.created_at >= window_start,
+            )
+        )
+    )
+    recent_count = len(rate_result.scalars().all())
+    if recent_count >= settings.rate_limit_per_device:
+        raise HTTPException(
+            status_code=429,
+            detail={"error_code": "RATE_LIMITED", "message": "创建频率超限，请稍后再试"},
+        )
+
     # ── 读取音频到内存 buffer，不落盘 ──
     max_bytes = settings.audio_max_size_mb * 1024 * 1024
     audio_bytes = await audio.read()
@@ -98,7 +128,7 @@ async def create_challenge(
         del fake_audio
 
     # ── 写入数据库 ──
-    challenge = Challenge(id=challenge_id, fake_url=fake_url)
+    challenge = Challenge(id=challenge_id, fake_url=fake_url, device_id=device_id)
     db.add(challenge)
     await db.commit()
 
