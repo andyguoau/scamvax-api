@@ -38,8 +38,15 @@ async def get_db():
 
 
 async def init_db():
-    """创建所有表（开发用；生产用 Alembic）"""
+    """创建所有表，并补齐缺失的列（幂等，可重复运行）"""
     async with engine.begin() as conn:
         from app.models import share  # noqa: F401
         from app.models import challenge  # noqa: F401
         await conn.run_sync(Base.metadata.create_all)
+
+        # 补齐 device_id 列（老数据库可能没有）
+        await conn.execute(
+            __import__("sqlalchemy").text(
+                "ALTER TABLE challenges ADD COLUMN IF NOT EXISTS device_id VARCHAR(64)"
+            )
+        )
