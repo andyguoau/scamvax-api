@@ -107,10 +107,11 @@ async def create_challenge(
     try:
         fake_audio = await generate_ai_audio(audio_bytes)
     except TTSVCError as e:
-        logger.error(f"TTS-VC 生成失败: {e}")
+        err_detail = str(e)
+        logger.error(f"TTS-VC 生成失败: {err_detail}")
         raise HTTPException(
             status_code=503,
-            detail={"error_code": "MODEL_FAILED", "message": "AI 音频生成失败，请重试"},
+            detail={"error_code": "MODEL_FAILED", "message": f"AI 音频生成失败: {err_detail}"},
         )
     finally:
         del audio_bytes  # 原始音频立即丢弃

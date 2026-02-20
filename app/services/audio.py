@@ -95,11 +95,7 @@ def convert_to_wav(raw_bytes: bytes, filename: str = "", content_type: str = "")
     fmt = _detect_format(raw_bytes, filename, content_type)
     logger.info(f"检测到音频格式: {fmt} (filename={filename}, content_type={content_type})")
 
-    # WAV 直接透传（已经是正确格式无需转换）
-    if fmt == "wav":
-        return raw_bytes
-
-    # 使用 pydub 转换
+    # 使用 pydub 转换（WAV 也经过重新编码，修复 Android 录音 data chunk size 错误问题）
     try:
         from pydub import AudioSegment
     except ImportError:
