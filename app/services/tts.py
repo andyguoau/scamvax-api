@@ -62,18 +62,53 @@ async def enroll_voice(audio_bytes: bytes) -> str:
     return voice_name
 
 
+async def delete_voice(voice_name: str) -> None:
+    """
+    删除已注册的音色，释放配额（账户上限 1000 条）。
+    失败只记 warning，不影响主流程。
+    端点: POST /services/audio/tts/customization  action="delete"
+    """
+    headers = {
+        "Authorization": f"Bearer {settings.dashscope_api_key}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": ENROLL_MODEL,
+        "input": {
+            "action": "delete",
+            "target_model": TTS_MODEL,
+            "voice": voice_name,
+        },
+    }
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(ENROLL_URL, headers=headers, json=payload) as resp:
+                text = await resp.text()
+                if resp.status != 200:
+                    logger.warning(f"Voice 删除失败 {resp.status}: {text}，voice={voice_name}")
+                else:
+                    logger.info(f"Voice 删除成功，voice={voice_name}")
+    except Exception as e:
+        logger.warning(f"Voice 删除异常（已忽略）: {e}，voice={voice_name}")
+
+
 async def generate_ai_audio(audio_bytes: bytes, lang: str = "zh") -> bytes:
     """
     完整流程：
     1. 音色注册 → voice_name
     2. HTTP TTS-VC 合成 → 音频 URL
     3. 下载音频，返回 WAV bytes
+    4. 删除临时音色（释放账户配额）
     """
     voice_name = await enroll_voice(audio_bytes)
-    script = SCRIPT if lang == "zh" else SCRIPT_EN
-    ai_audio = await _tts_via_http(voice_name, script)
-    logger.info(f"AI 音频生成完成，大小={len(ai_audio)} bytes")
-    return ai_audio
+    try:
+        script = SCRIPT if lang == "zh" else SCRIPT_EN
+        ai_audio = await _tts_via_http(voice_name, script)
+        logger.info(f"AI 音频生成完成，大小={len(ai_audio)} bytes")
+        return ai_audio
+    finally:
+        # 无论成功还是失败都删除临时音色，避免消耗账户 1000 条配额
+        await delete_voice(voice_name)
 
 
 async def _tts_via_http(voice_name: str, text: str) -> bytes:
