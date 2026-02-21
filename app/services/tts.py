@@ -1,9 +1,7 @@
 import base64
 import json
 import logging
-import struct
 import aiohttp
-import websockets
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -14,7 +12,7 @@ SCRIPT = "现在的人工智能发展太快，只需要5秒钟的录音就能克
 SCRIPT_EN = "AI voice technology has advanced so fast that just 5 seconds of audio can clone anyone's voice. If a scammer called you using my voice right now, would you be able to tell it was fake?"
 
 ENROLL_URL = "https://dashscope-intl.aliyuncs.com/api/v1/services/audio/tts/customization"
-WS_URL = "wss://dashscope-intl.aliyuncs.com/api-ws/v1/realtime?model=qwen3-tts-vc-2026-01-22"
+SYNTHESIS_URL = "https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
 TTS_MODEL = "qwen3-tts-vc-2026-01-22"
 ENROLL_MODEL = "qwen-voice-enrollment"
 
@@ -68,100 +66,52 @@ async def generate_ai_audio(audio_bytes: bytes, lang: str = "zh") -> bytes:
     """
     完整流程：
     1. 音色注册 → voice_name
-    2. WebSocket TTS-VC 合成
-    3. 返回 PCM/WAV bytes
+    2. HTTP TTS-VC 合成 → 音频 URL
+    3. 下载音频，返回 WAV bytes
     """
     voice_name = await enroll_voice(audio_bytes)
     script = SCRIPT if lang == "zh" else SCRIPT_EN
-    ai_audio = await _tts_via_websocket(voice_name, script)
+    ai_audio = await _tts_via_http(voice_name, script)
     logger.info(f"AI 音频生成完成，大小={len(ai_audio)} bytes")
     return ai_audio
 
 
-async def _tts_via_websocket(voice_name: str, text: str) -> bytes:
+async def _tts_via_http(voice_name: str, text: str) -> bytes:
     """
-    WebSocket TTS-VC 合成
-    协议: session.update → input_text_buffer.append → response.audio.delta
+    HTTP TTS-VC 合成（qwen3-tts-vc-2026-01-22 非实时版本）
+    POST → 取 output.audio.url → 下载音频
     """
-    headers = {"Authorization": f"Bearer {settings.dashscope_api_key}"}
-    audio_chunks = []
-
-    async with websockets.connect(WS_URL, extra_headers=headers) as ws:
-        # 1. 配置 session
-        await ws.send(json.dumps({
-            "type": "session.update",
-            "session": {
-                "voice": voice_name,
-                "mode": "server_commit",
-                "response_format": "pcm",
-                "sample_rate": 24000,
-            },
-        }))
-
-        # 等待 session.updated 确认
-        ack = json.loads(await ws.recv())
-        logger.info(f"Session ack: {ack.get('type')}")
-        if ack.get("type") == "error":
-            raise TTSVCError(f"Session 配置失败: {ack}")
-
-        # 2. 发送文本
-        await ws.send(json.dumps({
-            "type": "input_text_buffer.append",
+    headers = {
+        "Authorization": f"Bearer {settings.dashscope_api_key}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": TTS_MODEL,
+        "input": {
             "text": text,
-        }))
+            "voice": voice_name,
+        },
+    }
 
-        # 3. 提交生成（server_commit 模式下自动开始生成，不需要 response.create）
-        await ws.send(json.dumps({
-            "type": "input_text_buffer.commit",
-        }))
+    logger.info(f"开始 HTTP TTS 合成，voice={voice_name}")
+    async with aiohttp.ClientSession() as session:
+        async with session.post(SYNTHESIS_URL, headers=headers, json=payload) as resp:
+            resp_text = await resp.text()
+            if resp.status != 200:
+                logger.error(f"TTS HTTP 合成失败 {resp.status}: {resp_text}")
+                raise TTSVCError(f"TTS 合成失败: HTTP {resp.status} - {resp_text}")
+            data = json.loads(resp_text)
 
-        # 4. 接收音频流
-        async for message in ws:
-            if isinstance(message, bytes):
-                audio_chunks.append(message)
-                continue
+    audio_url = data.get("output", {}).get("audio", {}).get("url")
+    if not audio_url:
+        raise TTSVCError(f"响应中未找到音频 URL: {data}")
 
-            event = json.loads(message)
-            event_type = event.get("type", "")
-            logger.info(f"WS event: {event_type}")
+    logger.info(f"TTS 合成成功，下载音频: {audio_url[:80]}...")
+    async with aiohttp.ClientSession() as session:
+        async with session.get(audio_url) as resp:
+            if resp.status != 200:
+                raise TTSVCError(f"音频下载失败: HTTP {resp.status}")
+            audio_bytes = await resp.read()
 
-            if event_type == "response.audio.delta":
-                # base64 编码的 PCM 片段
-                delta = event.get("delta", "")
-                if delta:
-                    audio_chunks.append(base64.b64decode(delta))
-
-            elif event_type == "response.done":
-                logger.info("TTS 生成完成")
-                break
-
-            elif event_type == "error":
-                raise TTSVCError(f"TTS 生成失败: {event}")
-
-    if not audio_chunks:
-        raise TTSVCError("未收到任何音频数据")
-
-    pcm_data = b"".join(audio_chunks)
-    return _pcm_to_wav(pcm_data, sample_rate=24000, channels=1, bit_depth=16)
-
-
-def _pcm_to_wav(pcm_data: bytes, sample_rate: int, channels: int, bit_depth: int) -> bytes:
-    """给裸 PCM 数据加上 WAV 文件头，浏览器才能播放"""
-    data_size = len(pcm_data)
-    header = struct.pack(
-        "<4sI4s4sIHHIIHH4sI",
-        b"RIFF",
-        data_size + 36,       # 文件总大小 - 8
-        b"WAVE",
-        b"fmt ",
-        16,                   # fmt chunk 大小
-        1,                    # PCM 格式
-        channels,
-        sample_rate,
-        sample_rate * channels * bit_depth // 8,  # 字节率
-        channels * bit_depth // 8,                # 块对齐
-        bit_depth,
-        b"data",
-        data_size,
-    )
-    return header + pcm_data
+    logger.info(f"音频下载完成，大小={len(audio_bytes)} bytes")
+    return audio_bytes
