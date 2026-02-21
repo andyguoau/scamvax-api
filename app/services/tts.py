@@ -14,8 +14,8 @@ SCRIPT = "现在的人工智能发展太快，只需要5秒钟的录音就能克
 SCRIPT_EN = "AI voice technology has advanced so fast that just 5 seconds of audio can clone anyone's voice. If a scammer called you using my voice right now, would you be able to tell it was fake?"
 
 ENROLL_URL = "https://dashscope-intl.aliyuncs.com/api/v1/services/audio/tts/customization"
-WS_URL = "wss://dashscope-intl.aliyuncs.com/api-ws/v1/realtime?model=qwen3-tts-vc-realtime-2026-01-15"
-TTS_MODEL = "qwen3-tts-vc-realtime-2026-01-15"
+WS_URL = "wss://dashscope-intl.aliyuncs.com/api-ws/v1/realtime?model=qwen3-tts-vc-2026-01-22"
+TTS_MODEL = "qwen3-tts-vc-2026-01-22"
 ENROLL_MODEL = "qwen-voice-enrollment"
 
 

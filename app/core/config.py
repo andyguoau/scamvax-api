@@ -25,7 +25,7 @@ class Settings:
         self.aliyun_url = os.environ.get("ALIYUN_URL", "")
 
         self.voice_enroll_model = os.environ.get("VOICE_ENROLL_MODEL", "qwen-voice-enrollment")
-        self.tts_model = os.environ.get("TTS_MODEL", "qwen3-tts-vc-realtime-2026-01-15")
+        self.tts_model = os.environ.get("TTS_MODEL", "qwen3-tts-vc-2026-01-22")
         self.dashscope_base_http = os.environ.get("DASHSCOPE_BASE_HTTP", "https://dashscope-intl.aliyuncs.com/api/v1")
         self.dashscope_base_ws = os.environ.get("DASHSCOPE_BASE_WS", "wss://dashscope-intl.aliyuncs.com/api-ws/v1/realtime")
 
