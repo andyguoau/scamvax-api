@@ -30,8 +30,8 @@ class Settings:
         self.dashscope_base_ws = os.environ.get("DASHSCOPE_BASE_WS", "wss://dashscope-intl.aliyuncs.com/api-ws/v1/realtime")
 
         # Rate limiting
-        self.rate_limit_per_device = int(os.environ.get("RATE_LIMIT_PER_DEVICE", "5"))
-        self.rate_limit_window_seconds = int(os.environ.get("RATE_LIMIT_WINDOW_SECONDS", "3600"))
+        self.rate_limit_per_device = int(os.environ.get("RATE_LIMIT_PER_DEVICE", "50"))
+        self.rate_limit_window_seconds = int(os.environ.get("RATE_LIMIT_WINDOW_SECONDS", "60"))
 
         # Audio constraints
         self.audio_max_size_mb = int(os.environ.get("AUDIO_MAX_SIZE_MB", "10"))
