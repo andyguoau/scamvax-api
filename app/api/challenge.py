@@ -157,7 +157,7 @@ CHALLENGE_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Can you trust this voice?</title>
+  <title>AI or Real?</title>
   <style>
     * {{ box-sizing: border-box; margin: 0; padding: 0; }}
     body {{
@@ -215,9 +215,9 @@ CHALLENGE_HTML = """<!DOCTYPE html>
 </head>
 <body>
   <div class="card">
-    <h1 id="title">Can you trust this voice?</h1>
+    <h1 id="title">AI or Real?</h1>
     <p class="description" id="description">
-      This is an AI-cloned voice. Modern AI can replicate anyone's voice from just a few seconds of audio.
+      Modern AI can replicate anyone's voice from just a few seconds of audio.
       If you received a call like this — would you know it was fake?
     </p>
 
@@ -226,7 +226,6 @@ CHALLENGE_HTML = """<!DOCTYPE html>
         <source src="{fake_url}" type="audio/wav"/>
         Your browser does not support the audio element.
       </audio>
-      <div class="audio-label" id="audio-label">AI-generated voice — this is NOT a real person</div>
     </div>
 
     <a class="share-btn" href="javascript:void(0)" onclick="shareChallenge()" id="share-btn">
@@ -256,11 +255,10 @@ CHALLENGE_HTML = """<!DOCTYPE html>
 
     if (isChinese) {{
       document.documentElement.lang = 'zh';
-      document.title = '你能听出这是 AI 声音吗？';
-      document.getElementById('title').textContent = '你能听出这是 AI 声音吗？';
+      document.title = 'AI 还是真人？';
+      document.getElementById('title').textContent = 'AI 还是真人？';
       document.getElementById('description').textContent =
-        '这是一段 AI 克隆的声音。现代 AI 只需几秒录音就能完美复制任何人的声音。如果你接到这样的电话，你能判断出是假的吗？';
-      document.getElementById('audio-label').textContent = 'AI 生成的声音 — 这不是真人录音';
+        '现代 AI 只需几秒录音就能完美复制任何人的声音。如果你接到这样的电话，你能判断出是假的吗？';
       document.getElementById('share-btn').textContent = '把这个挑战发给你的家人';
       document.getElementById('app-title').textContent = '制作你的专属声音挑战';
       document.getElementById('app-subtitle').textContent = '保护你在乎的人，远离 AI 语音诈骗。';
@@ -271,7 +269,7 @@ CHALLENGE_HTML = """<!DOCTYPE html>
     function shareChallenge() {{
       var url = window.location.href;
       var isCh = document.documentElement.lang === 'zh';
-      var title = isCh ? '你能听出这是 AI 声音吗？' : 'Can you trust this voice?';
+      var title = isCh ? 'AI 还是真人？' : 'AI or Real?';
       var text = isCh
         ? '听听这段声音，你能分辨出是真人还是 AI 克隆吗？'
         : 'Listen to this AI voice clone — can you tell it\\'s fake? Share with your family to protect them.';
