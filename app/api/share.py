@@ -1,6 +1,7 @@
 import logging
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
-from fastapi.responses import StreamingResponse
+from fastapi.responses import RedirectResponse
+from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
@@ -9,6 +10,7 @@ from app.services.audio import convert_to_wav, AudioProcessingError
 from app.services.tts import generate_ai_audio, TTSVCError
 from app.services import share as share_service
 from app.services import storage
+from app.services.unlock import consume_unlock_token, UnlockError
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -34,7 +36,7 @@ class ErrorResponse(BaseModel):
 async def create_share(
     audio_file: UploadFile = File(..., description="WAV PCM16 24kHz Mono"),
     device_id: str = Form(...),
-    unlock_proof: str = Form(..., description="IAP receipt 或 reward token"),
+    unlock_proof: str = Form(..., description="由 /api/unlock/issue 签发的一次性 token"),
     lang: str = Form("zh"),
     db: AsyncSession = Depends(get_db),
 ):
@@ -63,8 +65,8 @@ async def create_share(
             detail={"error_code": "RATE_LIMITED", "message": "创建频率超限，请稍后再试"},
         )
 
-    # ── unlock_proof 校验（TODO: 接入真实 IAP 验证）──
-    if not unlock_proof or unlock_proof == "NONE":
+    # ── unlock_proof 基本校验 ──
+    if not unlock_proof:
         raise HTTPException(
             status_code=402,
             detail={"error_code": "UNLOCK_REQUIRED", "message": "需要付费或完成关卡解锁"},
@@ -93,7 +95,15 @@ async def create_share(
             detail={"error_code": "MODEL_FAILED", "message": "AI 音频生成失败，请重试"},
         )
 
-    # ── 创建 Share ──
+    # ── 消费一次性解锁令牌 + 创建 Share（同一事务） ──
+    try:
+        await consume_unlock_token(db, device_id=device_id, token=unlock_proof.strip())
+    except UnlockError as e:
+        raise HTTPException(
+            status_code=e.status_code,
+            detail={"error_code": e.error_code, "message": e.message},
+        )
+
     share = await share_service.create_share(
         db=db,
         device_id=device_id,
@@ -117,8 +127,9 @@ async def get_audio(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    受控音频播放接口（不暴露 R2 直链）
-    仅在 share 为 active 且未过期时返回音频流
+    受控音频播放入口：
+    - 先校验 share 是否可访问
+    - 校验通过后 307 重定向到 R2 直链，音频流量由 R2/CDN 承载
     """
     share = await share_service.get_share(db, share_id)
 
@@ -128,17 +139,12 @@ async def get_audio(
             detail={"error_code": "SHARE_UNAVAILABLE", "message": "挑战已过期或不存在"},
         )
 
-    try:
-        audio_stream = storage.stream_audio(share_id)
-    except FileNotFoundError:
+    exists = await run_in_threadpool(storage.audio_exists, share_id)
+    if not exists:
         raise HTTPException(status_code=404, detail={"error_code": "AUDIO_NOT_FOUND", "message": "音频不存在"})
 
-    return StreamingResponse(
-        audio_stream,
-        media_type="audio/wav",
-        headers={
-            "Content-Disposition": f'inline; filename="challenge_{share_id}.wav"',
-            "Cache-Control": "no-store",
-            "X-Content-Type-Options": "nosniff",
-        },
+    return RedirectResponse(
+        url=storage.get_fake_url(share_id),
+        status_code=307,
+        headers={"Cache-Control": "no-store"},
     )

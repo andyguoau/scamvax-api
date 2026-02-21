@@ -42,6 +42,7 @@ async def init_db():
     async with engine.begin() as conn:
         from app.models import share  # noqa: F401
         from app.models import challenge  # noqa: F401
+        from app.models import unlock  # noqa: F401
         await conn.run_sync(Base.metadata.create_all)
 
         # 补齐 device_id 列（老数据库可能没有）

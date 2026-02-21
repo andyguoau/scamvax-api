@@ -3,6 +3,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse
+from starlette.concurrency import run_in_threadpool
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 
@@ -12,6 +13,7 @@ from app.models.challenge import Challenge
 from app.services.tts import generate_ai_audio, TTSVCError
 from app.services.audio import convert_to_wav, AudioProcessingError
 from app.services import storage
+from app.services.unlock import consume_unlock_token, UnlockError
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -22,10 +24,12 @@ router = APIRouter(tags=["challenge"])
 
 @router.post("/test_upload")
 async def test_upload(audio: UploadFile = File(...)):
-    """上传音频到 R2，返回公开 URL，用于验证 R2 是否正常工作"""
+    """上传音频到 R2，返回公开 URL，用于验证 R2 是否正常工作（仅开发环境）"""
+    if settings.app_env != "development":
+        raise HTTPException(status_code=404, detail="Not found")
     audio_bytes = await audio.read()
     key = f"test/{uuid.uuid4()}.wav"
-    url = storage.upload_raw(key, audio_bytes)
+    url = await run_in_threadpool(storage.upload_raw, key, audio_bytes)
     return JSONResponse({"key": key, "public_url": url})
 
 
@@ -35,7 +39,7 @@ async def test_upload(audio: UploadFile = File(...)):
 async def create_challenge(
     audio: UploadFile = File(..., description="支持 WAV / MP3 / M4A / AAC / OGG / FLAC / WEBM"),
     device_id: str = Form(..., description="设备唯一 ID，由 App 生成并持久化"),
-    unlock_proof: str = Form(..., description="解锁凭证：CREDIT / BONUS / IAP_1 / IAP_4"),
+    unlock_proof: str = Form(..., description="解锁凭证：由 /api/unlock/issue 签发的一次性 token"),
     lang: str = Form("zh", description="语言：zh 或 en"),
     db: AsyncSession = Depends(get_db),
 ):
@@ -53,7 +57,7 @@ async def create_challenge(
     8. 返回 challenge_url
     """
     # ── 校验解锁凭证 ──
-    if not unlock_proof or unlock_proof.upper() == "NONE":
+    if not unlock_proof:
         raise HTTPException(
             status_code=402,
             detail={"error_code": "UNLOCK_REQUIRED", "message": "需要有效的解锁凭证"},
@@ -105,7 +109,7 @@ async def create_challenge(
 
     # ── 调用阿里云 TTS-VC 生成 fake 音频（直接传 bytes，不落盘）──
     try:
-        fake_audio = await generate_ai_audio(audio_bytes)
+        fake_audio = await generate_ai_audio(audio_bytes, lang=lang)
     except TTSVCError as e:
         err_detail = str(e)
         logger.error(f"TTS-VC 生成失败: {err_detail}")
@@ -118,7 +122,7 @@ async def create_challenge(
 
     # ── 上传 fake 音频到 R2: fake/{challenge_id}.wav ──
     try:
-        fake_url = storage.upload_audio(challenge_id, fake_audio)
+        fake_url = await run_in_threadpool(storage.upload_audio, challenge_id, fake_audio)
     except Exception as e:
         logger.error(f"R2 上传失败: {e}")
         raise HTTPException(
@@ -128,7 +132,15 @@ async def create_challenge(
     finally:
         del fake_audio
 
-    # ── 写入数据库 ──
+    # ── 消费一次性解锁令牌 + 写入数据库（同一事务） ──
+    try:
+        await consume_unlock_token(db, device_id=device_id, token=unlock_proof.strip())
+    except UnlockError as e:
+        raise HTTPException(
+            status_code=e.status_code,
+            detail={"error_code": e.error_code, "message": e.message},
+        )
+
     challenge = Challenge(id=challenge_id, fake_url=fake_url, device_id=device_id)
     db.add(challenge)
     await db.commit()

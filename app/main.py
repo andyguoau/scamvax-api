@@ -10,6 +10,7 @@ from app.core.scheduler import start_scheduler, stop_scheduler
 from app.api import share as share_router
 from app.api import webpage as webpage_router
 from app.api import challenge as challenge_router
+from app.api import unlock as unlock_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -51,6 +52,7 @@ app.add_middleware(
 app.include_router(challenge_router.router)   # POST /create_challenge, GET /c/{id}
 app.include_router(share_router.router)       # POST /api/share/create (旧接口保留)
 app.include_router(webpage_router.router)     # GET /s/{id} (旧接口保留)
+app.include_router(unlock_router.router)      # POST /api/unlock/issue
 
 
 # ─── Health check ─────────────────────────────────────────────────────────────

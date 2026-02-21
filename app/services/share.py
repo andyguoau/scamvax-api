@@ -2,6 +2,8 @@ import logging
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, and_
+from sqlalchemy.exc import IntegrityError
+from starlette.concurrency import run_in_threadpool
 from app.core.config import get_settings
 from app.models.share import Share, ShareStatus, generate_share_id
 from app.services import storage
@@ -26,33 +28,42 @@ async def create_share(
     2. 上传 AI 音频到 R2
     3. 写入数据库
     """
-    share_id = generate_share_id()
     expires_at = datetime.now(timezone.utc) + timedelta(hours=settings.share_ttl_hours)
 
-    # 上传音频（先传，传失败就不写 DB）
-    try:
-        audio_key = storage.upload_audio(share_id, ai_audio_bytes)
-    except Exception as e:
-        logger.error(f"音频上传失败: {e}")
-        raise
+    for attempt in range(3):
+        share_id = generate_share_id()
 
-    share = Share(
-        share_id=share_id,
-        device_id=device_id,
-        expires_at=expires_at,
-        click_count=0,
-        max_clicks=settings.share_max_clicks,
-        status=ShareStatus.active,
-        ai_audio_key=audio_key,
-        lang=lang,
-        platform=platform,
-        region=region,
-        script_version="v1",
-    )
-    db.add(share)
-    await db.commit()
-    await db.refresh(share)
-    return share
+        # 上传音频（先传，传失败就不写 DB）
+        try:
+            audio_key = await run_in_threadpool(storage.upload_audio, share_id, ai_audio_bytes)
+        except Exception as e:
+            logger.error(f"音频上传失败: {e}")
+            raise
+
+        share = Share(
+            share_id=share_id,
+            device_id=device_id,
+            expires_at=expires_at,
+            click_count=0,
+            max_clicks=settings.share_max_clicks,
+            status=ShareStatus.active,
+            ai_audio_key=audio_key,
+            lang=lang,
+            platform=platform,
+            region=region,
+            script_version="v1",
+        )
+        db.add(share)
+        try:
+            await db.commit()
+            await db.refresh(share)
+            return share
+        except IntegrityError:
+            await db.rollback()
+            await run_in_threadpool(storage.delete_audio, share_id)
+            if attempt == 2:
+                raise RuntimeError("share_id 冲突，无法创建 Share，请重试")
+            logger.warning(f"share_id 冲突，重新生成 (attempt {attempt + 1})")
 
 
 # ─── 访问（计数 + 过期检查） ────────────────────────────────────────────────
@@ -110,7 +121,7 @@ async def delete_share(db: AsyncSession, share_id: str) -> bool:
     2. 更新 DB status = deleted
     """
     # 删除 R2 音频
-    audio_deleted = storage.delete_audio(share_id)
+    audio_deleted = await run_in_threadpool(storage.delete_audio, share_id)
     if not audio_deleted:
         logger.warning(f"R2 音频删除失败或不存在: {share_id}")
 

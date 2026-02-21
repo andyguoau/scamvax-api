@@ -13,8 +13,8 @@ class ShareStatus(str, enum.Enum):
 
 
 def generate_share_id() -> str:
-    """生成 8 位短链接 ID"""
-    return uuid.uuid4().hex[:8]
+    """生成 12 位短链接 ID（48-bit 空间，碰撞概率极低）"""
+    return uuid.uuid4().hex[:12]
 
 
 class Share(Base):

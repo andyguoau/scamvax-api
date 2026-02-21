@@ -9,8 +9,9 @@ from app.core.config import get_settings
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-# 固定诈骗演习脚本
+# 诈骗演习脚本（中 / 英）
 SCRIPT = "现在的人工智能发展太快，只需要5秒钟的录音就能克隆一个人的声音。当骗子使用我的声音给你打电话的时候，你确定自己能分辨出来吗？即使现在能，再过半年也许就不能了。"
+SCRIPT_EN = "AI voice technology has advanced so fast that just 5 seconds of audio can clone anyone's voice. If a scammer called you using my voice right now, would you be able to tell it was fake?"
 
 ENROLL_URL = "https://dashscope-intl.aliyuncs.com/api/v1/services/audio/tts/customization"
 WS_URL = "wss://dashscope-intl.aliyuncs.com/api-ws/v1/realtime?model=qwen3-tts-vc-realtime-2026-01-15"
@@ -71,7 +72,8 @@ async def generate_ai_audio(audio_bytes: bytes, lang: str = "zh") -> bytes:
     3. 返回 PCM/WAV bytes
     """
     voice_name = await enroll_voice(audio_bytes)
-    ai_audio = await _tts_via_websocket(voice_name, SCRIPT)
+    script = SCRIPT if lang == "zh" else SCRIPT_EN
+    ai_audio = await _tts_via_websocket(voice_name, script)
     logger.info(f"AI 音频生成完成，大小={len(ai_audio)} bytes")
     return ai_audio
 
