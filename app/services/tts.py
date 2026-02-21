@@ -9,7 +9,7 @@ settings = get_settings()
 
 # 诈骗演习脚本（中 / 英）
 SCRIPT = "现在的人工智能发展太快，只需要5秒钟的录音就能克隆一个人的声音。当骗子使用我的声音给你打电话的时候，你确定自己能分辨出来吗？即使现在能，再过半年也许就不能了。"
-SCRIPT_EN = "AI voice technology has advanced so fast that just 5 seconds of audio can clone anyone's voice. If a scammer called you using my voice right now, would you be able to tell it was fake?"
+SCRIPT_EN = "Hey, it's me — or is it? AI can now clone my voice from just a few seconds of audio. If a scammer called you sounding exactly like this, would you know it wasn't real?"
 
 ENROLL_URL = "https://dashscope-intl.aliyuncs.com/api/v1/services/audio/tts/customization"
 SYNTHESIS_URL = "https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
