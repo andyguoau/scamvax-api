@@ -1,6 +1,7 @@
 import base64
 import json
 import logging
+import uuid
 import aiohttp
 from app.core.config import get_settings
 
@@ -11,14 +12,38 @@ settings = get_settings()
 SCRIPT = "现在的人工智能发展太快，只需要5秒钟的录音就能克隆一个人的声音。当骗子使用我的声音给你打电话的时候，你确定自己能分辨出来吗？即使现在能，再过半年也许就不能了。"
 SCRIPT_EN = "Hey, it's me — or is it? AI can now clone my voice from just a few seconds of audio. If a scammer called you sounding exactly like this, would you know it wasn't real?"
 
-ENROLL_URL = "https://dashscope-intl.aliyuncs.com/api/v1/services/audio/tts/customization"
-SYNTHESIS_URL = "https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
-TTS_MODEL = "qwen3-tts-vc-2026-01-22"
-ENROLL_MODEL = "qwen-voice-enrollment"
+BASE_HTTP = settings.dashscope_base_http.rstrip("/")
+ENROLL_URL = f"{BASE_HTTP}/services/audio/tts/customization"
+SYNTHESIS_URL = f"{BASE_HTTP}/services/aigc/multimodal-generation/generation"
+TTS_MODEL = settings.tts_model
+ENROLL_MODEL = settings.voice_enroll_model
 
 
 class TTSVCError(Exception):
     pass
+
+
+def _format_dashscope_error(resp_text: str) -> str:
+    try:
+        data = json.loads(resp_text)
+    except Exception:
+        return resp_text
+
+    code = data.get("code") or data.get("error_code") or "UNKNOWN_CODE"
+    message = data.get("message") or data.get("error_msg") or str(data)
+    request_id = data.get("request_id") or data.get("requestId")
+    if request_id:
+        return f"{code}: {message} (request_id={request_id})"
+    return f"{code}: {message}"
+
+
+def _validate_tts_settings() -> None:
+    if not settings.dashscope_api_key:
+        raise TTSVCError("缺少 DASHSCOPE_API_KEY（或 ALIYUN_API_KEY）配置")
+    if not TTS_MODEL:
+        raise TTSVCError("缺少 TTS_MODEL 配置")
+    if not ENROLL_MODEL:
+        raise TTSVCError("缺少 VOICE_ENROLL_MODEL 配置")
 
 
 async def enroll_voice(audio_bytes: bytes) -> str:
@@ -33,12 +58,13 @@ async def enroll_voice(audio_bytes: bytes) -> str:
         "Authorization": f"Bearer {settings.dashscope_api_key}",
         "Content-Type": "application/json",
     }
+    preferred_name = f"scamvax_{uuid.uuid4().hex[:12]}"
     payload = {
         "model": ENROLL_MODEL,
         "input": {
             "action": "create",
             "target_model": TTS_MODEL,
-            "preferred_name": "scamvax_voice",
+            "preferred_name": preferred_name,
             "audio": {
                 "data": data_uri,
             },
@@ -51,7 +77,7 @@ async def enroll_voice(audio_bytes: bytes) -> str:
             text = await resp.text()
             if resp.status != 200:
                 logger.error(f"Voice enrollment 失败 {resp.status}: {text}")
-                raise TTSVCError(f"音色注册失败: HTTP {resp.status} - {text}")
+                raise TTSVCError(f"音色注册失败: HTTP {resp.status} - {_format_dashscope_error(text)}")
             data = json.loads(text)
 
     voice_name = data.get("output", {}).get("voice")
@@ -76,7 +102,6 @@ async def delete_voice(voice_name: str) -> None:
         "model": ENROLL_MODEL,
         "input": {
             "action": "delete",
-            "target_model": TTS_MODEL,
             "voice": voice_name,
         },
     }
@@ -100,6 +125,13 @@ async def generate_ai_audio(audio_bytes: bytes, lang: str = "zh") -> bytes:
     3. 下载音频，返回 WAV bytes
     4. 删除临时音色（释放账户配额）
     """
+    _validate_tts_settings()
+    logger.info(
+        "TTS 配置: base=%s, tts_model=%s, enroll_model=%s",
+        BASE_HTTP,
+        TTS_MODEL,
+        ENROLL_MODEL,
+    )
     voice_name = await enroll_voice(audio_bytes)
     try:
         script = SCRIPT if lang == "zh" else SCRIPT_EN
@@ -134,7 +166,7 @@ async def _tts_via_http(voice_name: str, text: str) -> bytes:
             resp_text = await resp.text()
             if resp.status != 200:
                 logger.error(f"TTS HTTP 合成失败 {resp.status}: {resp_text}")
-                raise TTSVCError(f"TTS 合成失败: HTTP {resp.status} - {resp_text}")
+                raise TTSVCError(f"TTS 合成失败: HTTP {resp.status} - {_format_dashscope_error(resp_text)}")
             data = json.loads(resp_text)
 
     audio_url = data.get("output", {}).get("audio", {}).get("url")
