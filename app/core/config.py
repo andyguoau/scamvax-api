@@ -42,6 +42,11 @@ class Settings:
         self.share_ttl_hours = int(os.environ.get("SHARE_TTL_HOURS", "72"))
         self.share_max_clicks = int(os.environ.get("SHARE_MAX_CLICKS", "50"))
 
+        # Client remote config (ads)
+        self.ads_enabled = os.environ.get("ADS_ENABLED", "true").lower() in ("1", "true", "yes", "on")
+        self.admob_interstitial_ios = os.environ.get("ADMOB_INTERSTITIAL_IOS", "")
+        self.admob_interstitial_android = os.environ.get("ADMOB_INTERSTITIAL_ANDROID", "")
+
     def get_r2_endpoint(self) -> str:
         return self.r2_endpoint_url
 

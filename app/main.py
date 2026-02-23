@@ -12,6 +12,7 @@ from app.api import webpage as webpage_router
 from app.api import challenge as challenge_router
 from app.api import unlock as unlock_router
 from app.api import privacy as privacy_router
+from app.api import client_config as client_config_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -55,6 +56,7 @@ app.include_router(share_router.router)       # POST /api/share/create (旧接�
 app.include_router(webpage_router.router)     # GET /s/{id} (旧接口保留)
 app.include_router(privacy_router.router)    # GET /privacy
 app.include_router(unlock_router.router)      # POST /api/unlock/issue
+app.include_router(client_config_router.router)  # GET /api/client-config
 
 
 # ─── Health check ─────────────────────────────────────────────────────────────
