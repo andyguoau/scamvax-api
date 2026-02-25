@@ -58,28 +58,55 @@ async def enroll_voice(audio_bytes: bytes) -> str:
         "Authorization": f"Bearer {settings.dashscope_api_key}",
         "Content-Type": "application/json",
     }
-    # DashScope 对 preferred_name 字段有格式约束，使用短横线避免下划线触发参数校验失败
-    preferred_name = f"scamvax-{uuid.uuid4().hex[:12]}"
-    payload = {
-        "model": ENROLL_MODEL,
-        "input": {
+    # DashScope 对 preferred_name 的格式校验较严格，按“纯字母数字 -> 不传字段”做兜底。
+    name_candidates = [f"sv{uuid.uuid4().hex[:14]}", uuid.uuid4().hex[:16]]
+
+    async def _post_create(input_payload: dict) -> tuple[int, str]:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                ENROLL_URL,
+                headers=headers,
+                json={"model": ENROLL_MODEL, "input": input_payload},
+            ) as resp:
+                return resp.status, await resp.text()
+
+    logger.info("开始 voice enrollment...")
+    last_error = ""
+    data = None
+
+    for preferred_name in name_candidates:
+        input_payload = {
             "action": "create",
             "target_model": TTS_MODEL,
             "preferred_name": preferred_name,
-            "audio": {
-                "data": data_uri,
-            },
-        },
-    }
-
-    logger.info("开始 voice enrollment...")
-    async with aiohttp.ClientSession() as session:
-        async with session.post(ENROLL_URL, headers=headers, json=payload) as resp:
-            text = await resp.text()
-            if resp.status != 200:
-                logger.error(f"Voice enrollment 失败 {resp.status}: {text}")
-                raise TTSVCError(f"音色注册失败: HTTP {resp.status} - {_format_dashscope_error(text)}")
+            "audio": {"data": data_uri},
+        }
+        status, text = await _post_create(input_payload)
+        if status == 200:
             data = json.loads(text)
+            break
+        logger.warning(
+            "Voice enrollment 使用 preferred_name=%s 失败 %s: %s",
+            preferred_name,
+            status,
+            text,
+        )
+        last_error = f"HTTP {status} - {_format_dashscope_error(text)}"
+
+    # 最后再尝试一次：不传 preferred_name，让服务端自动命名（若接口支持）。
+    if data is None:
+        input_payload = {
+            "action": "create",
+            "target_model": TTS_MODEL,
+            "audio": {"data": data_uri},
+        }
+        status, text = await _post_create(input_payload)
+        if status == 200:
+            data = json.loads(text)
+        else:
+            logger.error("Voice enrollment 失败 %s: %s", status, text)
+            last_error = f"HTTP {status} - {_format_dashscope_error(text)}"
+            raise TTSVCError(f"音色注册失败: {last_error}")
 
     voice_name = data.get("output", {}).get("voice")
     if not voice_name:
