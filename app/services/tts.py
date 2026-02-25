@@ -58,7 +58,8 @@ async def enroll_voice(audio_bytes: bytes) -> str:
         "Authorization": f"Bearer {settings.dashscope_api_key}",
         "Content-Type": "application/json",
     }
-    preferred_name = f"scamvax_{uuid.uuid4().hex[:12]}"
+    # DashScope 对 preferred_name 字段有格式约束，使用短横线避免下划线触发参数校验失败
+    preferred_name = f"scamvax-{uuid.uuid4().hex[:12]}"
     payload = {
         "model": ENROLL_MODEL,
         "input": {
