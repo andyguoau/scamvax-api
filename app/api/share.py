@@ -23,8 +23,10 @@ def _is_audio_quality_issue(error_text: str) -> bool:
         "quality",
         "too short",
         "no speech",
+        "no audio data",
         "too noisy",
         "noise",
+        "audio.preprocesserror",
         "invalid audio",
         "audio format",
         "voice not clear",
@@ -34,6 +36,7 @@ def _is_audio_quality_issue(error_text: str) -> bool:
         "噪音",
         "太短",
         "无语音",
+        "没有音频",
         "不清晰",
     )
     return any(k in text for k in keywords)
