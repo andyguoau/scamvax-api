@@ -17,6 +17,44 @@ settings = get_settings()
 router = APIRouter(prefix="/api/share", tags=["share"])
 
 
+def _is_audio_quality_issue(error_text: str) -> bool:
+    text = error_text.lower()
+    keywords = (
+        "quality",
+        "too short",
+        "no speech",
+        "too noisy",
+        "noise",
+        "invalid audio",
+        "audio format",
+        "voice not clear",
+        "sample too short",
+        "unsupported language",
+        "音频",
+        "噪音",
+        "太短",
+        "无语音",
+        "不清晰",
+    )
+    return any(k in text for k in keywords)
+
+
+def _audio_quality_message(lang: str) -> str:
+    return (
+        "Recording quality is too low. Please re-record in a quiet place and speak clearly."
+        if lang == "en"
+        else "录音质量不达标，请在安静环境中清晰朗读后重试"
+    )
+
+
+def _model_failed_message(lang: str) -> str:
+    return (
+        "AI voice generation failed. Please try again."
+        if lang == "en"
+        else "AI 音频生成失败，请重试"
+    )
+
+
 # ─── 响应模型 ─────────────────────────────────────────────────────────────────
 
 class CreateShareResponse(BaseModel):
@@ -89,10 +127,19 @@ async def create_share(
     try:
         ai_audio = await generate_ai_audio(processed_audio, lang=lang)
     except TTSVCError as e:
-        logger.error(f"TTS-VC 生成失败: {e}")
+        err_detail = str(e)
+        logger.error(f"TTS-VC 生成失败: {err_detail}")
+        if _is_audio_quality_issue(err_detail):
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "error_code": "INVALID_AUDIO_QUALITY",
+                    "message": _audio_quality_message(lang),
+                },
+            )
         raise HTTPException(
             status_code=503,
-            detail={"error_code": "MODEL_FAILED", "message": "AI 音频生成失败，请重试"},
+            detail={"error_code": "MODEL_FAILED", "message": _model_failed_message(lang)},
         )
 
     # ── 消费一次性解锁令牌 + 创建 Share（同一事务） ──
