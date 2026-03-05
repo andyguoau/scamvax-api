@@ -66,6 +66,13 @@ async def health():
     return PlainTextResponse("OK")
 
 
+# ─── AdMob app-ads.txt ────────────────────────────────────────────────────────
+@app.get("/app-ads.txt", response_class=PlainTextResponse)
+async def app_ads_txt():
+    """AdMob app-ads.txt — 授权广告销售方声明"""
+    return "google.com, pub-5049579036153015, DIRECT, f08c47fec0942fa0\n"
+
+
 # ─── 全局错误处理 ─────────────────────────────────────────────────────────────
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
