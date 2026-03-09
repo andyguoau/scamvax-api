@@ -50,6 +50,10 @@ CHALLENGE_PAGE = """<!DOCTYPE html>
     .cta-btn {{ display: block; width: 100%; padding: 14px; background: #22c55e;
                 color: white; text-align: center; border-radius: 8px; font-weight: 600;
                 text-decoration: none; margin-bottom: 12px; }}
+    .store-links {{ display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }}
+    .store-link {{ display: block; width: 100%; padding: 14px; border: 1px solid #334155;
+                   background: #0f172a; color: #f1f5f9; text-align: center;
+                   border-radius: 8px; font-weight: 600; text-decoration: none; }}
     .footer {{ margin-top: 24px; font-size: 12px; color: #475569; text-align: center; }}
     .lang-switch {{ position: absolute; top: 16px; right: 16px; }}
     .lang-btn {{ background: #1e293b; color: #94a3b8; border: 1px solid #334155;
@@ -81,8 +85,22 @@ CHALLENGE_PAGE = """<!DOCTYPE html>
       <h2>{result_title}</h2>
       <p>{result_body}</p>
       <p><strong>{cta_hint}</strong></p>
-      <br/>
-      <a class="cta-btn" id="download-btn" href="#">{cta_text}</a>
+      <div class="store-links">
+        <a
+          class="cta-btn"
+          id="ios-download-btn"
+          href="https://apps.apple.com/app/scamvax/id6759446735"
+          target="_blank"
+          rel="noopener noreferrer"
+        >{cta_text}</a>
+        <a
+          class="store-link"
+          id="android-download-btn"
+          href="https://play.google.com/store/apps/details?id=com.scamvax.scamvax"
+          target="_blank"
+          rel="noopener noreferrer"
+        >{android_cta_text}</a>
+      </div>
     </div>
 
     <div class="footer">{footer}</div>
@@ -93,13 +111,13 @@ CHALLENGE_PAGE = """<!DOCTYPE html>
     var lang = navigator.language.startsWith('zh') ? 'zh' : 'en';
 
     var i18n = {{
-      zh: {{
-        ios_url: 'https://apps.apple.com/app/scamvax/id6759446735',
-        android_url: 'https://play.google.com/store/apps/details?id=com.scamvax.scamvax',
-      }},
       en: {{
-        ios_url: 'https://apps.apple.com/app/scamvax/id6759446735',
-        android_url: 'https://play.google.com/store/apps/details?id=com.scamvax.scamvax',
+        ios_text: 'Create My Challenge & Protect My Family →',
+        android_text: 'Get ScamVax on Google Play →',
+      }},
+      zh: {{
+        ios_text: '制作我的挑战，提醒亲友防骗 →',
+        android_text: '前往 Google Play 下载 ScamVax →',
       }}
     }};
 
@@ -113,19 +131,9 @@ CHALLENGE_PAGE = """<!DOCTYPE html>
     function submit() {{
       document.getElementById('challenge').style.display = 'none';
       document.getElementById('result').style.display = 'block';
-
-      // 设置下载链接（UA 分流）
-      var ua = navigator.userAgent;
-      var dlBtn = document.getElementById('download-btn');
-      var info = i18n[lang];
-      if (/iPhone|iPad|iPod/.test(ua)) {{
-        dlBtn.href = info.ios_url;
-      }} else if (/Android/.test(ua)) {{
-        dlBtn.href = info.android_url;
-      }} else {{
-        dlBtn.href = info.ios_url;
-        dlBtn.innerHTML += ' / Android';
-      }}
+      var info = i18n[lang] || i18n.en;
+      document.getElementById('ios-download-btn').textContent = info.ios_text;
+      document.getElementById('android-download-btn').textContent = info.android_text;
     }}
 
     function toggleLang() {{
@@ -178,6 +186,7 @@ I18N = {
         "result_body": "仅凭听觉，你无法可靠地验证对方身份。AI 可以完美模拟你亲人的声音。",
         "cta_hint": "💡 立即建立家庭安全暗号：任何要求转账或验证码的电话，必须用暗号验证。",
         "cta_text": "制作我的挑战，提醒亲友防骗 →",
+        "android_cta_text": "前往 Google Play 下载 ScamVax →",
         "footer": "该挑战将在 72 小时或 50 次访问后自动删除",
     },
     "en": {
@@ -191,6 +200,7 @@ I18N = {
         "result_body": "You cannot reliably verify someone's identity by voice alone. AI can perfectly clone your family member's voice.",
         "cta_hint": "💡 Set a family safe word now: any call requesting money or codes must be verified with the safe word.",
         "cta_text": "Create My Challenge & Protect My Family →",
+        "android_cta_text": "Get ScamVax on Google Play →",
         "footer": "This challenge will be auto-deleted after 72 hours or 50 visits",
     },
 }
