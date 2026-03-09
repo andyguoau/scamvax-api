@@ -94,12 +94,12 @@ CHALLENGE_PAGE = """<!DOCTYPE html>
 
     var i18n = {{
       zh: {{
-        ios_url: 'https://apps.apple.com/app/scamvax',
-        android_url: 'https://play.google.com/store/apps/details?id=com.scamvax',
+        ios_url: 'https://apps.apple.com/app/scamvax/id6759446735',
+        android_url: 'https://play.google.com/store/apps/details?id=com.scamvax.scamvax',
       }},
       en: {{
-        ios_url: 'https://apps.apple.com/app/scamvax',
-        android_url: 'https://play.google.com/store/apps/details?id=com.scamvax',
+        ios_url: 'https://apps.apple.com/app/scamvax/id6759446735',
+        android_url: 'https://play.google.com/store/apps/details?id=com.scamvax.scamvax',
       }}
     }};
 
