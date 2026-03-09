@@ -51,3 +51,17 @@ async def init_db():
                 "ALTER TABLE challenges ADD COLUMN IF NOT EXISTS device_id VARCHAR(64)"
             )
         )
+        await conn.execute(
+            __import__("sqlalchemy").text(
+                "ALTER TABLE device_wallets ADD COLUMN IF NOT EXISTS bonus_claims_used INTEGER NOT NULL DEFAULT 0"
+            )
+        )
+        await conn.execute(
+            __import__("sqlalchemy").text(
+                """
+                UPDATE device_wallets
+                SET bonus_claims_used = 1
+                WHERE bonus_used = true AND bonus_claims_used = 0
+                """
+            )
+        )

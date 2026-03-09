@@ -12,6 +12,7 @@ from app.models.unlock import DeviceWallet, UnlockTokenUse
 settings = get_settings()
 _TOKEN_TTL_SECONDS = 10 * 60
 _METHODS = {"CREDIT", "BONUS"}
+_BONUS_LEVEL_INTERVAL = 20
 
 
 class UnlockError(Exception):
@@ -42,8 +43,8 @@ async def _ensure_wallet(db: AsyncSession, device_id: str) -> DeviceWallet:
     await db.execute(
         text(
             """
-            INSERT INTO device_wallets (device_id, credits, bonus_used)
-            VALUES (:device_id, 100, false)
+            INSERT INTO device_wallets (device_id, credits, bonus_used, bonus_claims_used)
+            VALUES (:device_id, 100, false, 0)
             ON CONFLICT (device_id) DO NOTHING
             """
         ),
@@ -58,7 +59,20 @@ async def _ensure_wallet(db: AsyncSession, device_id: str) -> DeviceWallet:
     return wallet
 
 
-async def issue_unlock_token(db: AsyncSession, device_id: str, method: str) -> str:
+def _bonus_rewards_earned(
+    completed_levels: int | None,
+) -> int:
+    if completed_levels is None:
+        return 0
+    return max(0, completed_levels) // _BONUS_LEVEL_INTERVAL
+
+
+async def issue_unlock_token(
+    db: AsyncSession,
+    device_id: str,
+    method: str,
+    completed_levels: int | None = None,
+) -> str:
     method = method.strip().upper()
     if method not in _METHODS:
         raise UnlockError("INVALID_UNLOCK_METHOD", "不支持的解锁方式", status_code=400)
@@ -66,8 +80,10 @@ async def issue_unlock_token(db: AsyncSession, device_id: str, method: str) -> s
     wallet = await _ensure_wallet(db, device_id)
     if method == "CREDIT" and wallet.credits <= 0:
         raise UnlockError("UNLOCK_REQUIRED", "可用次数不足")
-    if method == "BONUS" and wallet.bonus_used:
-        raise UnlockError("UNLOCK_REQUIRED", "奖励次数已用完")
+    if method == "BONUS":
+        rewards_earned = _bonus_rewards_earned(completed_levels)
+        if rewards_earned <= wallet.bonus_claims_used:
+            raise UnlockError("UNLOCK_REQUIRED", f"每完成 {_BONUS_LEVEL_INTERVAL} 关可获得 1 次奖励")
 
     payload = {
         "v": 1,
@@ -76,6 +92,8 @@ async def issue_unlock_token(db: AsyncSession, device_id: str, method: str) -> s
         "m": method,
         "exp": int(time.time()) + _TOKEN_TTL_SECONDS,
     }
+    if method == "BONUS":
+        payload["be"] = _bonus_rewards_earned(completed_levels)
     payload_part = _b64url_encode(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
     sig_part = _sign(payload_part)
     return f"{payload_part}.{sig_part}"
@@ -104,6 +122,7 @@ async def consume_unlock_token(db: AsyncSession, device_id: str, token: str) -> 
     token_device = payload.get("did")
     method = str(payload.get("m", "")).upper()
     jti = str(payload.get("jti", ""))
+    bonus_rewards_earned = int(payload.get("be", 0))
 
     if token_device != device_id:
         raise UnlockError("INVALID_UNLOCK_TOKEN", "解锁令牌与设备不匹配")
@@ -118,8 +137,8 @@ async def consume_unlock_token(db: AsyncSession, device_id: str, token: str) -> 
     await db.execute(
         text(
             """
-            INSERT INTO device_wallets (device_id, credits, bonus_used)
-            VALUES (:device_id, 100, false)
+            INSERT INTO device_wallets (device_id, credits, bonus_used, bonus_claims_used)
+            VALUES (:device_id, 100, false, 0)
             ON CONFLICT (device_id) DO NOTHING
             """
         ),
@@ -139,9 +158,10 @@ async def consume_unlock_token(db: AsyncSession, device_id: str, token: str) -> 
             raise UnlockError("UNLOCK_REQUIRED", "可用次数不足")
         wallet.credits -= 1
     elif method == "BONUS":
-        if wallet.bonus_used:
-            raise UnlockError("UNLOCK_REQUIRED", "奖励次数已用完")
-        wallet.bonus_used = True
+        if bonus_rewards_earned <= wallet.bonus_claims_used:
+            raise UnlockError("UNLOCK_REQUIRED", f"每完成 {_BONUS_LEVEL_INTERVAL} 关可获得 1 次奖励")
+        wallet.bonus_claims_used += 1
+        wallet.bonus_used = wallet.bonus_claims_used > 0
 
     db.add(UnlockTokenUse(jti=jti, device_id=device_id, method=method))
     return method

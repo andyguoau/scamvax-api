@@ -10,6 +10,7 @@ router = APIRouter(prefix="/api/unlock", tags=["unlock"])
 class IssueUnlockRequest(BaseModel):
     device_id: str
     method: str
+    completed_levels: int | None = None
 
 
 class IssueUnlockResponse(BaseModel):
@@ -24,6 +25,7 @@ async def issue_unlock(req: IssueUnlockRequest, db: AsyncSession = Depends(get_d
             db=db,
             device_id=req.device_id.strip(),
             method=req.method.strip(),
+            completed_levels=req.completed_levels,
         )
     except UnlockError as e:
         raise HTTPException(

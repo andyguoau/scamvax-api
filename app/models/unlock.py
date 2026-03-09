@@ -10,6 +10,7 @@ class DeviceWallet(Base):
     device_id: Mapped[str] = mapped_column(String(128), primary_key=True)
     credits: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
     bonus_used: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    bonus_claims_used: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
