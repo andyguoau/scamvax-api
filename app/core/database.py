@@ -58,6 +58,11 @@ async def init_db():
         )
         await conn.execute(
             __import__("sqlalchemy").text(
+                "ALTER TABLE device_wallets ALTER COLUMN credits SET DEFAULT 1"
+            )
+        )
+        await conn.execute(
+            __import__("sqlalchemy").text(
                 """
                 UPDATE device_wallets
                 SET bonus_claims_used = 1

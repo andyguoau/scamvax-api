@@ -44,7 +44,7 @@ async def _ensure_wallet(db: AsyncSession, device_id: str) -> DeviceWallet:
         text(
             """
             INSERT INTO device_wallets (device_id, credits, bonus_used, bonus_claims_used)
-            VALUES (:device_id, 100, false, 0)
+            VALUES (:device_id, 1, false, 0)
             ON CONFLICT (device_id) DO NOTHING
             """
         ),
@@ -138,7 +138,7 @@ async def consume_unlock_token(db: AsyncSession, device_id: str, token: str) -> 
         text(
             """
             INSERT INTO device_wallets (device_id, credits, bonus_used, bonus_claims_used)
-            VALUES (:device_id, 100, false, 0)
+            VALUES (:device_id, 1, false, 0)
             ON CONFLICT (device_id) DO NOTHING
             """
         ),

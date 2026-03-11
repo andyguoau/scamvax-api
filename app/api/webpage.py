@@ -90,15 +90,13 @@ CHALLENGE_PAGE = """<!DOCTYPE html>
           class="cta-btn"
           id="ios-download-btn"
           href="https://apps.apple.com/app/scamvax/id6759446735"
-          target="_blank"
-          rel="noopener noreferrer"
+          onclick="return openStore(event, 'https://apps.apple.com/app/scamvax/id6759446735')"
         >{cta_text}</a>
         <a
           class="store-link"
           id="android-download-btn"
           href="https://play.google.com/store/apps/details?id=com.scamvax.scamvax"
-          target="_blank"
-          rel="noopener noreferrer"
+          onclick="return openStore(event, 'https://play.google.com/store/apps/details?id=com.scamvax.scamvax')"
         >{android_cta_text}</a>
       </div>
     </div>
@@ -134,6 +132,18 @@ CHALLENGE_PAGE = """<!DOCTYPE html>
       var info = i18n[lang] || i18n.en;
       document.getElementById('ios-download-btn').textContent = info.ios_text;
       document.getElementById('android-download-btn').textContent = info.android_text;
+    }}
+
+    function openStore(event, url) {{
+      if (event) {{
+        event.preventDefault();
+      }}
+      try {{
+        window.location.assign(url);
+      }} catch (e) {{
+        window.location.href = url;
+      }}
+      return false;
     }}
 
     function toggleLang() {{
