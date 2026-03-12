@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.services.audio import convert_to_wav, AudioProcessingError
-from app.services.tts import generate_ai_audio, TTSVCError, MAX_SCRIPT_CHARS
+from app.services.tts import generate_ai_audio, TTSVCError, get_max_script_chars
 from app.services import share as share_service
 from app.services import storage
 from app.services.unlock import consume_unlock_token, UnlockError
@@ -64,15 +64,16 @@ def _normalize_generation_text(text: str | None, lang: str) -> str | None:
     normalized = " ".join(text.split()).strip()
     if not normalized:
         return None
-    if len(normalized) > MAX_SCRIPT_CHARS:
+    max_script_chars = get_max_script_chars(lang)
+    if len(normalized) > max_script_chars:
         raise HTTPException(
             status_code=422,
             detail={
                 "error_code": "INVALID_TEXT",
                 "message": (
-                    f"Custom text must be {MAX_SCRIPT_CHARS} characters or fewer."
+                    f"Custom text must be {max_script_chars} characters or fewer."
                     if lang == "en"
-                    else f"生成文案不能超过 {MAX_SCRIPT_CHARS} 个字符"
+                    else f"生成文案不能超过 {max_script_chars} 个字符"
                 ),
             },
         )
