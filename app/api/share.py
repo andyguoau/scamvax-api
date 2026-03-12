@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.services.audio import convert_to_wav, AudioProcessingError
-from app.services.tts import generate_ai_audio, TTSVCError
+from app.services.tts import generate_ai_audio, TTSVCError, MAX_SCRIPT_CHARS
 from app.services import share as share_service
 from app.services import storage
 from app.services.unlock import consume_unlock_token, UnlockError
@@ -58,6 +58,27 @@ def _model_failed_message(lang: str) -> str:
     )
 
 
+def _normalize_generation_text(text: str | None, lang: str) -> str | None:
+    if text is None:
+        return None
+    normalized = " ".join(text.split()).strip()
+    if not normalized:
+        return None
+    if len(normalized) > MAX_SCRIPT_CHARS:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error_code": "INVALID_TEXT",
+                "message": (
+                    f"Custom text must be {MAX_SCRIPT_CHARS} characters or fewer."
+                    if lang == "en"
+                    else f"生成文案不能超过 {MAX_SCRIPT_CHARS} 个字符"
+                ),
+            },
+        )
+    return normalized
+
+
 # ─── 响应模型 ─────────────────────────────────────────────────────────────────
 
 class CreateShareResponse(BaseModel):
@@ -79,6 +100,7 @@ async def create_share(
     device_id: str = Form(...),
     unlock_proof: str = Form(..., description="由 /api/unlock/issue 签发的一次性 token"),
     lang: str = Form("zh"),
+    text: str | None = Form(None),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -97,6 +119,8 @@ async def create_share(
             status_code=413,
             detail={"error_code": "FILE_TOO_LARGE", "message": f"文件超过 {settings.audio_max_size_mb}MB 限制"},
         )
+
+    generation_text = _normalize_generation_text(text, lang)
 
     # ── 频率限制 ──
     allowed = await share_service.check_rate_limit(db, device_id)
@@ -128,7 +152,11 @@ async def create_share(
 
     # ── TTS-VC 生成 AI 音频 ──
     try:
-        ai_audio = await generate_ai_audio(processed_audio, lang=lang)
+        ai_audio = await generate_ai_audio(
+            processed_audio,
+            lang=lang,
+            text=generation_text,
+        )
     except TTSVCError as e:
         err_detail = str(e)
         logger.error(f"TTS-VC 生成失败: {err_detail}")

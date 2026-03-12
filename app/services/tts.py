@@ -1,6 +1,7 @@
 import base64
 import json
 import logging
+import re
 import uuid
 import aiohttp
 from app.core.config import get_settings
@@ -11,6 +12,7 @@ settings = get_settings()
 # 诈骗演习脚本（中 / 英）
 SCRIPT = "现在的人工智能发展太快，只需要5秒钟的录音就能克隆一个人的声音。当骗子使用我的声音给你打电话的时候，你确定自己能分辨出来吗？即使现在能，再过半年也许就不能了。"
 SCRIPT_EN = "Hey, it's me — or is it? AI can now clone my voice from just a few seconds of audio. If a scammer called you sounding exactly like this, would you know it wasn't real?"
+MAX_SCRIPT_CHARS = 200
 
 BASE_HTTP = settings.dashscope_base_http.rstrip("/")
 ENROLL_URL = f"{BASE_HTTP}/services/audio/tts/customization"
@@ -145,7 +147,11 @@ async def delete_voice(voice_name: str) -> None:
         logger.warning(f"Voice 删除异常（已忽略）: {e}，voice={voice_name}")
 
 
-async def generate_ai_audio(audio_bytes: bytes, lang: str = "zh") -> bytes:
+async def generate_ai_audio(
+    audio_bytes: bytes,
+    lang: str = "zh",
+    text: str | None = None,
+) -> bytes:
     """
     完整流程：
     1. 音色注册 → voice_name
@@ -162,13 +168,21 @@ async def generate_ai_audio(audio_bytes: bytes, lang: str = "zh") -> bytes:
     )
     voice_name = await enroll_voice(audio_bytes)
     try:
-        script = SCRIPT if lang == "zh" else SCRIPT_EN
+        script = _resolve_script(text=text, lang=lang)
         ai_audio = await _tts_via_http(voice_name, script)
         logger.info(f"AI 音频生成完成，大小={len(ai_audio)} bytes")
         return ai_audio
     finally:
         # 无论成功还是失败都删除临时音色，避免消耗账户 1000 条配额
         await delete_voice(voice_name)
+
+
+def _resolve_script(text: str | None, lang: str) -> str:
+    if text is not None:
+        normalized = re.sub(r"\s+", " ", text).strip()
+        if normalized:
+            return normalized
+    return SCRIPT if lang == "zh" else SCRIPT_EN
 
 
 async def _tts_via_http(voice_name: str, text: str) -> bytes:

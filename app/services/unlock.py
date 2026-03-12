@@ -12,7 +12,7 @@ from app.models.unlock import DeviceWallet, UnlockTokenUse
 settings = get_settings()
 _TOKEN_TTL_SECONDS = 10 * 60
 _METHODS = {"CREDIT", "BONUS"}
-_BONUS_LEVEL_INTERVAL = 20
+_BONUS_LEVEL_INTERVAL = 10
 
 
 class UnlockError(Exception):

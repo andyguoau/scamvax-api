@@ -10,7 +10,7 @@ from sqlalchemy import select, and_
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.models.challenge import Challenge
-from app.services.tts import generate_ai_audio, TTSVCError
+from app.services.tts import generate_ai_audio, TTSVCError, MAX_SCRIPT_CHARS
 from app.services.audio import convert_to_wav, AudioProcessingError
 from app.services import storage
 from app.services.unlock import consume_unlock_token, UnlockError
@@ -61,6 +61,27 @@ def _model_failed_message(lang: str, err_detail: str) -> str:
     )
 
 
+def _normalize_generation_text(text: str | None, lang: str) -> str | None:
+    if text is None:
+        return None
+    normalized = " ".join(text.split()).strip()
+    if not normalized:
+        return None
+    if len(normalized) > MAX_SCRIPT_CHARS:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error_code": "INVALID_TEXT",
+                "message": (
+                    f"Custom text must be {MAX_SCRIPT_CHARS} characters or fewer."
+                    if lang == "en"
+                    else f"生成文案不能超过 {MAX_SCRIPT_CHARS} 个字符"
+                ),
+            },
+        )
+    return normalized
+
+
 # ─── POST /test_upload（仅测试用，验证 R2 上传和公开 URL）────────────────────
 
 @router.post("/test_upload")
@@ -82,6 +103,7 @@ async def create_challenge(
     device_id: str = Form(..., description="设备唯一 ID，由 App 生成并持久化"),
     unlock_proof: str = Form(..., description="解锁凭证：由 /api/unlock/issue 签发的一次性 token"),
     lang: str = Form("zh", description="语言：zh 或 en"),
+    text: str | None = Form(None, description="要生成的语音文案，留空则使用默认文案"),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -132,6 +154,8 @@ async def create_challenge(
             detail={"error_code": "FILE_TOO_LARGE", "message": f"文件超过 {settings.audio_max_size_mb}MB 限制"},
         )
 
+    generation_text = _normalize_generation_text(text, lang)
+
     # ── 格式转换：统一转成 WAV ──
     try:
         audio_bytes = convert_to_wav(
@@ -150,7 +174,11 @@ async def create_challenge(
 
     # ── 调用阿里云 TTS-VC 生成 fake 音频（直接传 bytes，不落盘）──
     try:
-        fake_audio = await generate_ai_audio(audio_bytes, lang=lang)
+        fake_audio = await generate_ai_audio(
+            audio_bytes,
+            lang=lang,
+            text=generation_text,
+        )
     except TTSVCError as e:
         err_detail = str(e)
         logger.error(f"TTS-VC 生成失败: {err_detail}")
